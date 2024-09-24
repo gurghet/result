@@ -192,7 +192,7 @@ Temporary Items
 .history
 .ionide
 
-# End of https://www.toptal.com/developers/gitignore/api/java,intellij,macos,visualstudiocode
+# End ogpf https://www.toptal.com/developers/gitignore/api/java,intellij,macos,visualstudiocode
 
 *.env
 config/secrets.yml
