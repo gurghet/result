@@ -6,115 +6,109 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-public class Result<T> {
-  private final CheckedSupplier<T> thunk;
-  private T cachedValue;
-  private boolean evaluated;
-
-  protected Result(CheckedSupplier<T> thunk) {
-    if (thunk == null) {
-      throw new IllegalArgumentException("Result cannot hold a null thunk");
-    }
-    this.thunk = thunk;
-    this.evaluated = false;
-  }
+public abstract class Result<T> {
 
   public static <T> Result<T> of(Supplier<T> thunk) {
     if (thunk == null) {
       throw new IllegalArgumentException("Result cannot hold a null thunk");
     }
-    return new Result<>(() -> thunk.get());
+    try {
+      T value = thunk.get();
+      return success(value);
+    } catch (RuntimeException e) {
+      return failure(e);
+    }
+  }
+
+  public static Result<Void> of(Runnable runnableThunk) {
+    if (runnableThunk == null) {
+      throw new IllegalArgumentException("Result cannot hold a null thunk");
+    }
+    try {
+      runnableThunk.run();
+      return voidSuccess();
+    } catch (RuntimeException e) {
+      return failure(e);
+    }
+  }
+
+  private static Result<Void> voidSuccess() {
+    return new Success<>(null, true);
   }
 
   public static <T> Result<T> ofSneakyThrows(CheckedSupplier<T> checkedThunk) {
-    return new Result<>(checkedThunk);
+    if (checkedThunk == null) {
+      throw new IllegalArgumentException("Result cannot hold a null thunk");
+    }
+    try {
+      T value = checkedThunk.get();
+      return success(value);
+    } catch (RuntimeException e) {
+      return failure(e);
+    } catch (Exception e) {
+      return failure(new RuntimeException("Thrown checked exception, wrapping in RuntimeException", e));
+    }
   }
 
   public <U> Result<U> flatMap(Function<T, Result<U>> mapper) {
-    return new Result<>(() -> {
-      T value = unsafeGet();
-      Result<U> result = mapper.apply(value);
-      if (result == null) {
-        throw new NullPointerException("Mapper returned null Result");
+    try {
+      if (this.isFailure()) {
+        Failure<T> failure = (Failure<T>) this;
+        throw failure.getException();
+      } else {
+        Success<T> success = (Success<T>) this;
+        T x = success.getValue();
+        Result<U> result = mapper.apply(x);
+        if (result.isFailure()) {
+          Failure<U> flatMapFailure = (Failure<U>) result;
+          throw flatMapFailure.getException();
+        } else {
+          return result;
+        }
       }
-      return result.unsafeGet();
-    });
+    } catch (RuntimeException e) {
+      return failure(e);
+    }
   }
 
   public <U> Result<U> map(Function<T, U> mapper) {
-    return flatMap(x -> Result.of(() -> mapper.apply(x)));
+    if (this.isFailure()) {
+      Failure<T> failure = (Failure<T>) this;
+      return failure(failure.getException());
+    } else {
+      Success<T> success = (Success<T>) this;
+      try {
+        U value = mapper.apply(success.getValue());
+        return success(value);
+      } catch (RuntimeException e) {
+        return failure(e);
+      }
+    }
   }
 
   public T unsafeGet() throws RuntimeException {
-    if (!evaluated) {
-      try {
-        cachedValue = thunk.get();
-        evaluated = true;
-      } catch (RuntimeException e) {
-        throw e;
-      } catch (Exception e) {
-        throw new RuntimeException("Thrown checked exception, wrapping in RuntimeException", e);
-      }
-    }
-    return cachedValue;
-  }
-
-  @Override
-  public boolean equals(Object o) {
-    if (this == o) return true;
-    if (!(o instanceof Result)) return false;
-    Result<?> that = (Result<?>) o;
-
-    try {
-      Object thisResult = this.unsafeGet();
-      Object thatResult = that.unsafeGet();
-
-      if (thisResult == null && thatResult == null) {
-        return true;
-      }
-      if (thisResult == null || thatResult == null) {
-        return false;
-      }
-      return thisResult.equals(thatResult);
-    } catch (RuntimeException thisEx) {
-      try {
-        that.unsafeGet();
-        return false; // Only this threw an exception
-      } catch (RuntimeException thatEx) {
-        // Both threw exceptions, compare them
-        return thisEx.getClass().equals(thatEx.getClass()) &&
-                Objects.equals(thisEx.getMessage(), thatEx.getMessage());
-      }
-    }
-  }
-
-  @Override
-  public int hashCode() {
-    try {
-      Object result = unsafeGet();
-      return Objects.hashCode(result);
-    } catch (RuntimeException e) {
-      return Objects.hash(e.getClass(), e.getMessage());
-    }
-  }
-
-  @Override
-  public String toString() {
-    try {
-      return "Success(" + unsafeGet() + ")";
-    } catch (RuntimeException e) {
-      return "Failure(" + e + ")";
+    if (isFailure()) {
+      Failure<T> failure = (Failure<T>) this;
+      throw failure.getException();
+    } else {
+      Success<T> success = (Success<T>) this;
+      return success.getValue();
     }
   }
 
   public Result<T> mapError(Function<RuntimeException, RuntimeException> mapper) {
-    return new Result<>(() -> {
-      try {
-        return unsafeGet();
-      } catch (RuntimeException e) {
-        throw mapper.apply(e);
+    try {
+      if (this.isFailure()) {
+        Failure<T> failure = (Failure<T>) this;
+        RuntimeException e = failure.getException();
+        RuntimeException mapped = mapper.apply(e);
+        return failure(mapped);
+      } else {
+        return this;
       }
-    });
+    } catch (RuntimeException e) {
+      return failure(e);
+    }
   }
 
   public Result<T> tap(Consumer<T> c) {
@@ -129,12 +123,7 @@ public class Result<T> {
   }
 
   public boolean isFailure() {
-    try {
-      unsafeGet();
-      return false;
-    } catch (RuntimeException e) {
-      return true;
-    }
+    return this instanceof Failure;
   }
 
   public boolean isSuccess() {
@@ -142,56 +131,57 @@ public class Result<T> {
   }
 
   public T orElse(T other) {
-    try {
-      return unsafeGet();
-    } catch (RuntimeException e) {
+    if (isFailure()) {
       return other;
+    } else {
+      return unsafeGet();
     }
   }
 
   public T orElseGet(Supplier<T> supplier) {
-    try {
-      return unsafeGet();
-    } catch (RuntimeException e) {
+    if (isFailure()) {
       try {
         return supplier.get();
-      } catch (RuntimeException e2) {
-        e.addSuppressed(new RuntimeException("Error in orElseGet supplier", e2));
-        throw e;
+      } catch (RuntimeException e) {
+        ((Failure<T>) this).getException().addSuppressed(e);
+        throw ((Failure<T>) this).getException();
       }
+    } else {
+      return unsafeGet();
     }
   }
 
   public T orElseThrow() {
-    try {
+    if (isFailure()) {
+      throw ((Failure<T>) this).getException();
+    } else {
       return unsafeGet();
-    } catch (RuntimeException e) {
-      throw e;
     }
   }
 
   public T orElseThrow(RuntimeException e) {
-    try {
+    if (isFailure()) {
+      RuntimeException newException = new RuntimeException(e.getMessage(), e);
+      newException.addSuppressed(((Failure<T>) this).getException());
+      throw newException;
+    } else {
       return unsafeGet();
-    } catch (RuntimeException e2) {
-      e.addSuppressed(e2);
-      throw e;
     }
   }
 
   public T orElseThrow(Function<RuntimeException, ? extends RuntimeException> exceptionMapper) {
-    try {
+    if (isFailure()) {
+      throw exceptionMapper.apply(((Failure<T>) this).getException());
+    } else {
       return unsafeGet();
-    } catch (RuntimeException e) {
-      throw exceptionMapper.apply(e);
     }
   }
 
   public Optional<T> toOptional() {
-    try {
-      return Optional.of(unsafeGet());
-    } catch (RuntimeException e) {
+    if (isFailure()) {
       return Optional.empty();
+    } else {
+      return Optional.of(unsafeGet());
     }
   }
 
@@ -203,7 +193,7 @@ public class Result<T> {
   }
 
   public static <T> Success<T> success(T value) {
-    return new Success<>(value);
+    return new Success<>(value, false);
   }
 
   public static <T> Failure<T> failure(RuntimeException exception) {
@@ -219,61 +209,57 @@ public class Result<T> {
   }
 
   public Result<T> catchAll(Function<RuntimeException, Result<T>> handler) {
-    return new Result<>(() -> {
-      try {
-        return this.unsafeGet();
-      } catch (RuntimeException e) {
-        return handler.apply(e).unsafeGet();
-      }
-    });
+    if (this.isFailure()) {
+      Failure<T> failure = (Failure<T>) this;
+      RuntimeException e = failure.getException();
+      return handler.apply(e);
+    } else {
+      return this;
+    }
   }
 
   public Result<T> catchAll(Supplier<Result<T>> handler) {
-    return new Result<>(() -> {
-      try {
-        return this.unsafeGet();
-      } catch (RuntimeException e) {
-        return handler.get().unsafeGet();
-      }
-    });
+    if (this.isFailure()) {
+      return handler.get();
+    } else {
+      return this;
+    }
   }
 
   public Result<T> catchAll(Result<T> handler) {
-    return new Result<>(() -> {
-      try {
-        return this.unsafeGet();
-      } catch (RuntimeException e) {
-        return handler.unsafeGet();
-      }
-    });
+    if (this.isFailure()) {
+      return handler;
+    } else {
+      return this;
+    }
   }
 
   public <E extends RuntimeException> Result<T> catchSome(Class<E> exceptionType, Function<E, Result<T>> handler) {
-    return new Result<>(() -> {
-      try {
-        return this.unsafeGet();
-      } catch (RuntimeException e) {
-        if (exceptionType.isInstance(e)) {
-          return handler.apply(exceptionType.cast(e)).unsafeGet();
-        } else {
-          throw e;
-        }
+    if (this.isFailure()) {
+      Failure<T> failure = (Failure<T>) this;
+      RuntimeException e = failure.getException();
+      if (exceptionType.isInstance(e)) {
+        return handler.apply((E) e);
+      } else {
+        return this;
       }
-    });
+    } else {
+      return this;
+    }
   }
 
   public <E extends RuntimeException> Result<T> catchSome(Class<E> exceptionType, Supplier<Result<T>> handler) {
-    return new Result<>(() -> {
-      try {
-        return this.unsafeGet();
-      } catch (RuntimeException e) {
-        if (exceptionType.isInstance(e)) {
-          return handler.get().unsafeGet();
-        } else {
-          throw e;
-        }
+    if (this.isFailure()) {
+      Failure<T> failure = (Failure<T>) this;
+      RuntimeException e = failure.getException();
+      if (exceptionType.isInstance(e)) {
+        return handler.get();
+      } else {
+        return this;
       }
-    });
+    } else {
+      return this;
+    }
   }
 
   public <U> Result<U> as(U value) {
