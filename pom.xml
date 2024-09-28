@@ -6,6 +6,26 @@
   <groupId>com.gurghet</groupId>
   <artifactId>result</artifactId>
   <version>0.0.1</version>
+  <description>Result data type for Java</description>
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>Andrea Passaglia</name>
+      <email>gurghet@proton.me</email>
+      <organization>Effective Software</organization>
+      <organizationUrl>https://gurghet.com</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:git://github.com/gurghet/result.git</connection>
+    <developerConnection>scm:git:ssh://github.com:gurghet/result.git</developerConnection>
+    <url>https://github.com/gurghet/result</url>
+  </scm>
 
   <name>result</name>
   <url>https://www.gurghet.com/result</url>
@@ -26,6 +46,14 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+
+  <distributionManagement>
+    <repository>
+      <id>central</id>
+      <name>Central Repository</name>
+      <url>https://central.sonatype.com/content/repositories/releases</url>
+    </repository>
+  </distributionManagement>
 
   <dependencies>
     <dependency>
@@ -66,6 +94,66 @@
       </plugins>
     </pluginManagement>
     <plugins>
+      <plugin>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.6.0</version>
+        <extensions>true</extensions>
+        <configuration>
+          <publishingServerId>central</publishingServerId>
+          <tokenEnabled>true</tokenEnabled>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>3.2.7</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>3.3.0</version>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar-no-fork</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.6.3</version>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+        <version>3.1.1</version>
+        <configuration>
+          <tagNameFormat>v@{project.version}</tagNameFormat>
+          <autoVersionSubmodules>true</autoVersionSubmodules>
+          <releaseProfiles>release</releaseProfiles>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-toolchains-plugin</artifactId>
