@@ -4,7 +4,7 @@
 
   <groupId>com.gurghet</groupId>
   <artifactId>result</artifactId>
-  <version>0.0.2</version>
+  <version>0.0.3-SNAPSHOT</version>
   <description>Result data type for Java</description>
   <licenses>
     <license>
@@ -24,7 +24,7 @@
     <connection>scm:git:git://github.com/gurghet/result.git</connection>
     <developerConnection>scm:git:ssh://github.com:gurghet/result.git</developerConnection>
     <url>https://github.com/gurghet/result</url>
-    <tag>v0.0.2</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <name>result</name>
