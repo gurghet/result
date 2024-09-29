@@ -103,3 +103,11 @@ jobs:
         run: |
           mvn -B -s ~/.m2/settings.xml release:perform \
           -DskipTests
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create v${{ github.event.inputs.releaseVersion }} \
+            --title "Release ${{ github.event.inputs.releaseVersion }}" \
+            --notes "Release ${{ github.event.inputs.releaseVersion }}" \
+            --target ${{ github.ref }}
